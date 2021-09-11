@@ -1,4 +1,3 @@
-
 %{
 #include<cstdio>
 #include<iostream>
@@ -50,20 +49,36 @@ void create_file_and_put_in_map(  std::string comment)
 };
 
 int to_int(int c) {
-    if (not isxdigit(c)) return -1; // error: non-hexadecimal digit found
+    if (not isxdigit(c)) { cout << "Not Hex digit " << c << "  \n"; return -1; }// error: non-hexadecimal digit found
     if (isdigit(c)) return c - '0';
     if (isupper(c)) c = tolower(c);
+    if ((c - 'a' + 10)  < 0 ) {
+        cout << "minus-1 error:[" << c << "]\n";
+    }
     return c - 'a' + 10;
 }
 
 template<class InputIterator, class OutputIterator> int
-unhexlify(InputIterator first, InputIterator last, OutputIterator ascii) {
+unhexlify(InputIterator first, InputIterator last, OutputIterator ascii, int& pos) {
     while (first != last) {
-        int top = to_int(*first++);
-        int bot = to_int(*first++);
-        if (top == -1 or bot == -1)
+        char f = *first++;
+        char s = *first++;
+        //if (f == '0' || f == '\r' || s == ' ' || s== '\r' ) {
+        //    return 0;
+        //}
+        
+        int top = to_int(f);
+        int bot = to_int(s);
+        //int top = to_int(*first++);
+        //int bot = to_int(*first++);
+        if (top == -1 or bot == -1) {
+            cout << first;
+            cout << "Postion is .....[" << pos << "]"   << f  << "  " << s << "\n";
             return -1; // error
+            //return 0;
+        }
         *ascii++ = (top << 4) + bot;
+        pos++;
     }
      return 0;
 }
@@ -74,6 +89,71 @@ inline bool exists_file (const std::string& name) {
 }
 
 string last_send_name;
+
+
+void payload_write_hexencoded( char *s) {
+    s += 2; //jump 0h
+    size_t len = strlen(s);
+    if ((len % 2) != 0) {
+        cout << "Len will fail " << len << "\n";
+    } else {
+        cout << "Len will pass " << len << "\n";
+    }
+    size_t asciilen = len/2;
+    char ascii[len/2+1];
+    ascii[len/2] = '\0';
+    memset(ascii, 'a',  len/2 + 1);
+    int written = 0;
+
+    if (unhexlify(s, s+len, ascii, written) < 0) {
+        std::cout << "Unhexilify error in file: " << last_file <<  "Len: " << len/2 << "SuccessLen: " << written << "\n";
+    }
+    
+    std::ofstream myfile;
+    myfile.open(last_file.c_str(), std::ios::out | std::ios::binary | std::ios::app );
+    myfile.write( ascii, written);
+}
+
+void payload_write( char *s) {
+    if (s[0] == '0' && s[1] == 'h') {
+        return payload_write_hexencoded( s );
+    }
+    std::ofstream myfile;
+    myfile.open(last_file.c_str(), std::ios::out | std::ios::binary | std::ios::app );
+    myfile.write( s, strlen(s) );
+}
+
+
+void payload_write_newline( char *s) {
+    if (s[0] == '0' && s[1] == 'h') {
+        return payload_write_hexencoded( s );
+    }
+
+    std::ofstream myfile;
+    myfile.open(last_file.c_str(), std::ios::out | std::ios::binary | std::ios::app );
+    if (s[0] == '"') {
+        s += 1;
+        size_t slen = strlen(s);
+    
+        if (slen > strlen("X-MU-Session-ID")) {
+            if (memcmp("X-MU-Session-ID", s, 15) == 0) {
+                return;
+            }
+        }
+        string mod= "";
+        for (size_t i = 0; i < (slen-5); i++ ) {
+            if ( (s[i] == '\\') && (s[i+1] == '"') ) {
+                continue;
+            }
+            mod.push_back( s[i] );
+        }
+        myfile.write( mod.c_str(), mod.length());
+    } else {
+        myfile.write( s, strlen(s));
+    }
+    myfile.write( "\r\n", 2 );
+}
+
 void func_write(char *sendname, char *s) {
     last_send_name = string(sendname);
     if (last_send_name.find("Continuation") == std::string::npos) {
@@ -82,20 +162,7 @@ void func_write(char *sendname, char *s) {
                 //this is to care of cases where 2 different actions are using same file name
         } 
     }
-    s += 2; //jump 0h
-    size_t len = strlen(s);
-    size_t asciilen = len/2;
-    char ascii[len/2+1];
-    ascii[len/2] = '\0';
-
-    if (unhexlify(s, s+len, ascii) < 0) {
-        throw "Wrong in hex decoding";
-        return ; // error
-    }
-    
-    std::ofstream myfile;
-    myfile.open(last_file.c_str(), std::ios::out | std::ios::binary | std::ios::app );
-    myfile.write( ascii, asciilen);
+    payload_write( s );
 }
 
 %}
@@ -140,6 +207,13 @@ char *sval;
 %token <sval> REGEXSTRING
 %token <sval> FILTER
 %token <sval> ASSERTION
+%token <sval> HTTP_RESPONSE
+%token <sval> HTTP_REQUEST
+%token <sval> HTTP_HDR_END
+%token <sval> HEX_BODY
+%token <sval> HTTP_BODY
+%token <sval> HEADERFUNCLINE
+%token <sval> LENGTH_STRING
 
 %start msl
 %%
@@ -206,6 +280,30 @@ assertpayload:
 socksend: sendargs
 sockssendsrecvs
 ;
+payloads:
+|httprequest { /* cout << "[ New HTTP Request]\n"; */ }
+|httpresponse { /* cout << "[ New HTTP Response]\n"; */ }
+|hexcontent
+|onlycontinuation
+;
+
+httpresponse: HTTP_RESPONSE httplines HTTP_HDR_END httpbody {}
+;
+httprequest: HTTP_REQUEST httplines HTTP_HDR_END httpbody  { cout << $3 << "\n"; }
+;
+lenstring: LENGTH_STRING { cout << "EEEEEEEEEEEEEEEEEEEEEEEEEEEE \n" ; }
+;
+httplines :  
+|STRINGLINE httplines 
+|HEADERFUNCLINE lenstring RIGHTRECTANGLE httplines
+;
+httpbody:
+|HTTP_BODY
+;
+hexcontent: HEX_BODY
+;
+onlycontinuation: HTTP_BODY
+;
 sendpayload:
 |juststring sendpayload
 |bitstring sendpayload
@@ -234,7 +332,7 @@ variablestring: ASCIISTRING EQUALTO juststring { /* cout << "1-Variable String d
 funcparam:juststring 
 |bitstring
 ;
-commaseparatedparams:
+commaseparatedparams: { cout <<  "Params in action \n"; }
 |funcparam 
 |functionwithrectangles
 |functionwithbrackets
@@ -244,9 +342,9 @@ commaseparatedparams:
 |linedata COMMA commaseparatedparams
 |structdata COMMA commaseparatedparams
 ;
-functionwithbrackets: ASCIISTRING LEFTBRACKET commaseparatedparams RIGHTBRACKET { /*cout << "Function data: " << $2 << endl;*/ }
+functionwithbrackets: ASCIISTRING LEFTBRACKET commaseparatedparams RIGHTBRACKET { cout << "Function data: " << $2 << endl; }
 ;
-functionwithrectangles: ASCIISTRING LEFTRECTANGLE commaseparatedparams RIGHTRECTANGLE { /*cout << "Function data: " << $2 << endl;*/ }
+functionwithrectangles: ASCIISTRING LEFTRECTANGLE commaseparatedparams RIGHTRECTANGLE {/* cout << "Function data: " << $2 << endl; */ }
 ;
 lineparams:
 |funcparam lineparams
@@ -258,7 +356,7 @@ linedata: LINE LEFTRECTANGLE lineparams RIGHTRECTANGLE
 ;
 structdata: STRUCT LEFTRECTANGLE lineparams RIGHTRECTANGLE
 ;
-sendargs: ASCIISTRING EQUALTO sendname LEFTBRACE sendpayload RIGHTBRACE {  /* cout << "abbb " << $1 << "\n" ; */ func_write( $1, $6 );   /*cout << "ActualPayload[\n" << $6 << "\n]\n"; */ }
+sendargs: ASCIISTRING EQUALTO sendname LEFTBRACE payloads RIGHTBRACE {  /* cout << "abbb " << $1 << "\n" ;  func_write( $1, $6 ); */   /*cout << "ActualPayload[\n" << $6 << "\n]\n"; */ }
 ;
 sendname: ASCIISTRING DOT SERVERSEND { /* cout << "Send name is[" << $1 << "]\n"; */ } 
 |ASCIISTRING DOT CLIENTSEND
@@ -283,6 +381,8 @@ comma:
 ;
 %%
 
+//|functionwithbrackets LEFTRECTANGLE httplines RIGHTRECTANGLE httplines
+//sendargs: ASCIISTRING EQUALTO sendname LEFTBRACE sendpayload RIGHTBRACE {  /* cout << "abbb " << $1 << "\n" ; */ func_write( $1, $6 );   /*cout << "ActualPayload[\n" << $6 << "\n]\n"; */ }
 int main(int argc, char** argv) {
   FILE *myfile = fopen(argv[1], "r");
   if (!myfile) {
@@ -298,4 +398,3 @@ void yyerror(const char *s) {
   cout << "Parser error!  Message: " << s << endl;
   exit(-1);
 }
-
