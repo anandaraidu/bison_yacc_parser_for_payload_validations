@@ -1,4 +1,5 @@
+rm a.out lex.yy.c msl.output  msl.tab.c  msl.tab.h
 bison  -d msl.y -v --report=state
 flex msl.l
-g++  msl.tab.c lex.yy.c -lfl
-
+g++  -g msl.tab.c lex.yy.c -lfl
+rm lex.yy.c msl.output  msl.tab.c  msl.tab.h
