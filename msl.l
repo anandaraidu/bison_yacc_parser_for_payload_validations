@@ -1,6 +1,6 @@
 %{
   #include <iostream>
-  #include<string.h>
+  #include<string.h> 
   #include <cstdio>
   #include "msl.tab.h"  // to get the token types from Bison
   #include <map>
@@ -8,7 +8,7 @@ using namespace std;
 extern void create_file_and_put_in_map(  std::string comment);
 void payload_write_newline( char *s) ;
 /*
-As i understand it looks like the rules are scanned in order, so the general should
+As i understand it looks like the rules are scanned in order, so the general should 
 be in  the end and specific rules should be in the begining....
 */
 %}
@@ -100,7 +100,7 @@ be in  the end and specific rules should be in the begining....
             yylval.sval = strdup(yytext+i-1);
             payload_write_newline( yylval.sval );
             return HTTP_BODY;
-               }
+        }
     }
     //cout  << "hex content line:[" <<  yylval.sval <<  "]\n\n";
 }
@@ -151,7 +151,7 @@ be in  the end and specific rules should be in the begining....
   //std::cout << "Comment is[" << yylval.sval << "]\n";
   create_file_and_put_in_map(  yylval.sval );
   return COMMENT;
-  }
+}
 "\/"[a-zA-Z0-9_:\\\-()\[\]\*\+\.\/ ]+"\/"(":"[0-9]+)?      {
   yylval.sval = strdup(yytext);
   return REGEXSTRING;

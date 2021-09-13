@@ -1,3 +1,4 @@
+
 %{
 #include<cstdio>
 #include<iostream>
@@ -22,7 +23,8 @@ extern int yyparse();
 extern FILE *yyin;
 void yyerror(const char *s);
 #define YYDEBUG 1
-std::string last_file;
+std::string last_file = "";
+int last_len = 0;
 using namespace std;
 std::string get_filename_from_comments(std::string text)
 {
@@ -39,6 +41,9 @@ std::string get_filename_from_comments(std::string text)
         last = word;
     }
     last_file = last;
+    if (last_len > 0) {
+        printf("LastFile[ %s ]  LastLen[ %d ] \n", last_file.c_str(), last_len);
+    }
     return last;
 }
 
@@ -63,19 +68,13 @@ unhexlify(InputIterator first, InputIterator last, OutputIterator ascii, int& po
     while (first != last) {
         char f = *first++;
         char s = *first++;
-        //if (f == '0' || f == '\r' || s == ' ' || s== '\r' ) {
-        //    return 0;
-        //}
         
         int top = to_int(f);
         int bot = to_int(s);
-        //int top = to_int(*first++);
-        //int bot = to_int(*first++);
         if (top == -1 or bot == -1) {
             cout << first;
             cout << "Postion is .....[" << pos << "]"   << f  << "  " << s << "\n";
             return -1; // error
-            //return 0;
         }
         *ascii++ = (top << 4) + bot;
         pos++;
@@ -108,10 +107,12 @@ void payload_write_hexencoded( char *s) {
     if (unhexlify(s, s+len, ascii, written) < 0) {
         std::cout << "Unhexilify error in file: " << last_file <<  "Len: " << len/2 << "SuccessLen: " << written << "\n";
     }
+    //printf("Ascii is: %s",ascii);
     
     std::ofstream myfile;
     myfile.open(last_file.c_str(), std::ios::out | std::ios::binary | std::ios::app );
     myfile.write( ascii, written);
+    last_len += written;
 }
 
 void payload_write( char *s) {
@@ -154,6 +155,7 @@ void payload_write_newline( char *s) {
     myfile.write( "\r\n", 2 );
 }
 
+/*
 void func_write(char *sendname, char *s) {
     last_send_name = string(sendname);
     if (last_send_name.find("Continuation") == std::string::npos) {
@@ -164,6 +166,7 @@ void func_write(char *sendname, char *s) {
     }
     payload_write( s );
 }
+*/
 
 %}
 %define parse.trace
@@ -398,3 +401,4 @@ void yyerror(const char *s) {
   cout << "Parser error!  Message: " << s << endl;
   exit(-1);
 }
+
