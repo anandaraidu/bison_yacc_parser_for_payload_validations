@@ -16,7 +16,7 @@ using namespace std;
 
 std::map<string,string> hosts;
 
-std::map<std::string, std::ofstream> write_map; 
+std::map<std::string, int>  closed_files;
 std::map<string,string> options12;
 extern int yylex(); //called in a loop to get the next token
 extern int yyparse();
@@ -40,11 +40,23 @@ std::string get_filename_from_comments(std::string text)
         word.erase(std::remove_if(word.begin(), word.end(), ::isspace), word.end());
         last = word;
     }
+
+    if (last != last_file) {
+        closed_files.insert( std::make_pair(last_file, 1) );
+    }
     last_file = last;
     if (last_len > 0) {
-        printf("LastFile[ %s ]  LastLen[ %d ] \n", last_file.c_str(), last_len);
+        //printf("LastFile[ %s ]  LastLen[ %d ] \n", last_file.c_str(), last_len);
     }
     return last;
+}
+
+bool is_file_already_closed()
+{
+    if (closed_files.find(last_file) != closed_files.end()) {
+        return true; 
+    }
+    return false;
 }
 
 
@@ -54,7 +66,7 @@ void create_file_and_put_in_map(  std::string comment)
 };
 
 int to_int(int c) {
-    if (not isxdigit(c)) { cout << "Not Hex digit " << c << "  \n"; return -1; }// error: non-hexadecimal digit found
+    if (not isxdigit(c)) { /* cout << "Not Hex digit " << c << "  \n"; */ return -1; }// error: non-hexadecimal digit found
     if (isdigit(c)) return c - '0';
     if (isupper(c)) c = tolower(c);
     if ((c - 'a' + 10)  < 0 ) {
@@ -72,8 +84,8 @@ unhexlify(InputIterator first, InputIterator last, OutputIterator ascii, int& po
         int top = to_int(f);
         int bot = to_int(s);
         if (top == -1 or bot == -1) {
-            cout << first;
-            cout << "Postion is .....[" << pos << "]"   << f  << "  " << s << "\n";
+            //cout << first;
+            //cout << "Postion is .....[" << pos << "]"   << f  << "  " << s << "\n";
             return -1; // error
         }
         *ascii++ = (top << 4) + bot;
@@ -90,13 +102,13 @@ inline bool exists_file (const std::string& name) {
 string last_send_name;
 
 
-void payload_write_hexencoded( char *s) {
+void payload_write_hexencoded( const char *s) {
     s += 2; //jump 0h
     size_t len = strlen(s);
     if ((len % 2) != 0) {
-        cout << "Len will fail " << len << "\n";
+        ///cout << "Len will fail " << len << "\n";
     } else {
-        cout << "Len will pass " << len << "\n";
+        //cout << "Len will pass " << len << "\n";
     }
     size_t asciilen = len/2;
     char ascii[len/2+1];
@@ -105,7 +117,7 @@ void payload_write_hexencoded( char *s) {
     int written = 0;
 
     if (unhexlify(s, s+len, ascii, written) < 0) {
-        std::cout << "Unhexilify error in file: " << last_file <<  "Len: " << len/2 << "SuccessLen: " << written << "\n";
+        //std::cout << "Unhexilify error in file: " << last_file <<  "Len: " << len/2 << "SuccessLen: " << written << "\n";
     }
     //printf("Ascii is: %s",ascii);
     
@@ -115,7 +127,7 @@ void payload_write_hexencoded( char *s) {
     last_len += written;
 }
 
-void payload_write( char *s) {
+void payload_write( const char *s) {
     if (s[0] == '0' && s[1] == 'h') {
         return payload_write_hexencoded( s );
     }
@@ -125,7 +137,7 @@ void payload_write( char *s) {
 }
 
 
-void payload_write_newline( char *s) {
+void payload_write_newline( const char *s) {
     if (s[0] == '0' && s[1] == 'h') {
         return payload_write_hexencoded( s );
     }
@@ -292,9 +304,9 @@ payloads:
 
 httpresponse: HTTP_RESPONSE httplines HTTP_HDR_END httpbody {}
 ;
-httprequest: HTTP_REQUEST httplines HTTP_HDR_END httpbody  { cout << $3 << "\n"; }
+httprequest: HTTP_REQUEST httplines HTTP_HDR_END httpbody  { /* cout << $3 << "\n"; */ }
 ;
-lenstring: LENGTH_STRING { cout << "EEEEEEEEEEEEEEEEEEEEEEEEEEEE \n" ; }
+lenstring: LENGTH_STRING { /* cout << "EEEEEEEEEEEEEEEEEEEEEEEEEEEE \n" ; */ }
 ;
 httplines :  
 |STRINGLINE httplines 
@@ -307,17 +319,6 @@ hexcontent: HEX_BODY
 ;
 onlycontinuation: HTTP_BODY
 ;
-sendpayload:
-|juststring sendpayload
-|bitstring sendpayload
-|variablestring sendpayload
-|functionwithbrackets sendpayload
-|functionwithrectangles sendpayload
-|linedata sendpayload
-|structdata sendpayload
-|functionwithbrackets LEFTRECTANGLE sendpayload RIGHTRECTANGLE sendpayload
-|ASCIISTRING EQUALTO functionwithbrackets LEFTRECTANGLE sendpayload RIGHTRECTANGLE sendpayload
-;
 juststring: ASCIISTRING {/* cout << $1 << endl; */ }
 |NUMBERS { /* cout << $1 << endl; */ }
 |ATSTRING {/* cout << $1 << endl;*/}
@@ -329,13 +330,10 @@ bitstring: ATSTRING COLON NUMBERS
 |ASCIISTRING COLON NUMBERS
 |ASCIISTRING COLON STRINGLINE
 ;
-variablestring: ASCIISTRING EQUALTO juststring { /* cout << "1-Variable String detected " << $2 << endl;*/ }
-|ASCIISTRING EQUALTO bitstring {  /*cout << "1-Variable String detected " << $2 << endl;*/ }
-;
 funcparam:juststring 
 |bitstring
 ;
-commaseparatedparams: { cout <<  "Params in action \n"; }
+commaseparatedparams: { /* cout <<  "Params in action \n"; */}
 |funcparam 
 |functionwithrectangles
 |functionwithbrackets
@@ -345,7 +343,7 @@ commaseparatedparams: { cout <<  "Params in action \n"; }
 |linedata COMMA commaseparatedparams
 |structdata COMMA commaseparatedparams
 ;
-functionwithbrackets: ASCIISTRING LEFTBRACKET commaseparatedparams RIGHTBRACKET { cout << "Function data: " << $2 << endl; }
+functionwithbrackets: ASCIISTRING LEFTBRACKET commaseparatedparams RIGHTBRACKET { /* cout << "Function data: " << $2 << endl; */ }
 ;
 functionwithrectangles: ASCIISTRING LEFTRECTANGLE commaseparatedparams RIGHTRECTANGLE {/* cout << "Function data: " << $2 << endl; */ }
 ;
@@ -368,13 +366,13 @@ sockcreate: ASCIISTRING EQUALTO socktype LEFTBRACKET sockargs RIGHTBRACKET
 sockssendsrecvs
 ;
 socktype:
-|TCP  { cout << "\ntcpSocket: ";  }
-|UDP  { cout << "\nudpSocket: " ; }
+|TCP  { /* cout << "\ntcpSocket: "; */ }
+|UDP  { /* cout << "\nudpSocket: " ; */ }
 sockargs: sockarg 
 |sockargs sockarg
 ;
 sockarg:ASCIISTRING COLON ASCIISTRING comma {  /*cout << "sockarg: detected: " << $1 << " " << $3 << endl;  */ }
-|ASCIISTRING COLON NUMBERS comma { cout << "Port: " << $3 << endl;   }
+|ASCIISTRING COLON NUMBERS comma { /* cout << "Port: " << $3 << endl; */  }
 |ASCIISTRING COLON ANDSTRING comma {  /*cout << "sockarg: detected: " << $1 << " " << $3 << endl; */  }
 |FILTER COLON REGEXSTRING comma {  /*cout << "sockarg: detected: " << $1 << " " << $3 << endl;  */ }
 ;
